@@ -3,6 +3,7 @@
 package bqstreamer
 
 import (
+	"net"
 	"net/http"
 	"time"
 
@@ -189,20 +190,6 @@ func (w *SyncWorker) insertTableWithRetry(projectID, datasetID, tableID string, 
 
 	numRetries := 0
 	for {
-		numRetries++
-
-		// Abort if retries and failed too many times.
-		if numRetries > w.maxRetries {
-			err := &TooManyFailedInsertRetriesError{
-				NumFailedRetries: numRetries,
-				Project:          projectID,
-				Dataset:          datasetID,
-				Table:            tableID,
-			}
-			tableInsertErrs.InsertAttempts = append(tableInsertErrs.InsertAttempts, &TableInsertAttemptErrors{err: err})
-			return &tableInsertErrs
-		}
-
 		// Push this table's insert attempt as an additional one
 		// in insert attempts slice.
 		currTableInsertErrs := w.insertTable(projectID, datasetID, tableID, tbl)
@@ -211,9 +198,23 @@ func (w *SyncWorker) insertTableWithRetry(projectID, datasetID, tableID string, 
 
 		// Retry on certain HTTP responses.
 		if w.shouldRetryInsert(currInsertAttempt.err) {
+			// Abort if retries and failed too many times.
+			if numRetries >= w.maxRetries {
+				err := &TooManyFailedInsertRetriesError{
+					NumFailedRetries: numRetries,
+					Project:          projectID,
+					Dataset:          datasetID,
+					Table:            tableID,
+				}
+				tableInsertErrs.InsertAttempts = append(tableInsertErrs.InsertAttempts, &TableInsertAttemptErrors{err: err})
+				return &tableInsertErrs
+			}
+			numRetries++
+			// Sleep as a backoff mechanism.
+			// TODO add exponential backoff
+			time.Sleep(w.retryInterval)
 			continue
 		}
-
 		// If we reached here, it means the insert operation was successful.
 		// Thus, it is not required to retry the insert operation.
 		//
@@ -227,23 +228,21 @@ func (w *SyncWorker) insertTableWithRetry(projectID, datasetID, tableID string, 
 // shouldRetryInsert checks for given insert HTTP response error,
 // and returns true if the insert should be retried.
 //
-// It also sleeps if the return value is true,
-// as a backoff mechanism.
-//
 // There are various cases where a retry is or is not necessary.
 // See the following article for more info:
 // https://cloud.google.com/bigquery/troubleshooting-errors
 //
-// TODO add exponential backoff
 func (w *SyncWorker) shouldRetryInsert(err error) bool {
 	if err != nil {
-		// Retry on GoogleAPI HTTP server errors 500, 503.
-		if gerr, ok := err.(*googleapi.Error); ok {
-			switch gerr.Code {
-			case 500, 503:
-				time.Sleep(w.retryInterval)
+		switch err := err.(type) {
+		case *googleapi.Error:
+			// Retry on GoogleAPI HTTP server errors 500, 503.
+			if err.Code == 500 || err.Code == 503 {
 				return true
 			}
+		case net.Error:
+			// Retry on a network error.
+			return true
 		}
 	}
 	return false
