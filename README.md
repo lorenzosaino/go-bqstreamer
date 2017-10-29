@@ -1,10 +1,10 @@
-Kik and me ([@oryband](http://github.com/oryband)) are no longer maintaining this repository.
-Thanks for all the contributions. You are welcome to fork and continue development.
-
 # BigQuery Streamer <img src="bigquery.png" alt="BigQuery" width="32"> [![GoDoc][godoc image]][godoc]
 
 [Stream insert][stream insert] data into [BigQuery][bigquery] *fast* and *concurrently*,
 using [`InsertAll()`][InsertAll()].
+
+Note: this repository is a fork of [kikinteractive/go-bqstreamer](https://github.com/kikinteractive/go-bqstreamer) which is no longer maintained.
+
 
 ## Features
 
@@ -23,7 +23,7 @@ using [`InsertAll()`][InsertAll()].
 
 ## Getting Started
 
-1. Install Go, version should be at least 1.5.
+1. Install Go, version should be at least 1.6.
 1. Clone this repository and download dependencies:
   1. Version v2: `go get gopkg.in/kikinteractive/go-bqstreamer.v2`
   1. Version v1: `go get gopkg.in/kikinteractive/go-bqstreamer.v1`
