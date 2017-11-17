@@ -408,20 +408,6 @@ func TestAsyncWorkerInsertErrors(t *testing.T) {
 		assert.Fail("insert didn't occur as expected")
 	}
 
-	// This is for initial insert (with error response).
-	select {
-	case <-inserted:
-	case <-time.After(3 * time.Second):
-		require.Fail("insert wasn't called fast enough at first attempt")
-	}
-
-	// This is for no errors (successul), so no retry insert would happen.
-	select {
-	case <-inserted:
-	case <-time.After(3 * time.Second):
-		require.Fail("insert wasn't called fast enough at second attempt")
-	}
-
 	select {
 	case <-w.Close():
 	case <-time.After(1 * time.Second):
