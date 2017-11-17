@@ -6,7 +6,7 @@ deps:
 	go get -t
 
 test:
-	go test -coverprofile=coverage.txt
+	go test -v -coverprofile=coverage.txt
 
 testintegration:
 	# this requires environment variables to be set
