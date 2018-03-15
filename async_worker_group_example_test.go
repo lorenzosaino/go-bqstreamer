@@ -52,6 +52,7 @@ func ExampleAsyncWorkerGroup() {
 	// Initialize a worker group.
 	g, err := NewAsyncWorkerGroup(
 		jwtConfig,
+		false,
 		SetAsyncNumWorkers(10),               // Number of background workers in the group.
 		SetAsyncMaxRows(500),                 // Amount of rows that must be enqueued before executing an insert operation to BigQuery.
 		SetAsyncMaxDelay(1*time.Second),      // Time to wait between inserts.

@@ -24,7 +24,7 @@ func TestAsyncWorkerGroupNew(t *testing.T) {
 
 	// TestAsyncWorkerGroup giving bad arguments.
 	var err error
-	_, err = NewAsyncWorkerGroup(nil)
+	_, err = NewAsyncWorkerGroup(nil, false)
 	assert.EqualError(err, "jwt.Config is nil")
 	errChan := make(chan *InsertErrors)
 	_, err = newAsyncWorkerGroup(
