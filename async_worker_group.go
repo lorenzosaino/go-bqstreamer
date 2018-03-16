@@ -1,7 +1,9 @@
 package bqstreamer
 
 import (
+	"context"
 	"errors"
+	"net"
 	"net/http"
 	"sync"
 	"time"
@@ -49,14 +51,29 @@ type AsyncWorkerGroup struct {
 	skipInvalidRows bool
 }
 
+var dialer = &net.Dialer{}
+
+func connectIPv4Only(ctx context.Context, network, addr string) (net.Conn, error) {
+	return dialer.DialContext(ctx, "tcp4", addr)
+}
+
 // New returns a new AsyncWorkerGroup using given OAuth2/JWT configuration.
-func NewAsyncWorkerGroup(jwtConfig *jwt.Config, options ...AsyncOptionFunc) (*AsyncWorkerGroup, error) {
+func NewAsyncWorkerGroup(jwtConfig *jwt.Config, ipv4Only bool, options ...AsyncOptionFunc) (*AsyncWorkerGroup, error) {
 	if jwtConfig == nil {
 		return nil, errors.New("jwt.Config is nil")
 	}
 
 	// Create a new Streamer, with OAuth2/JWT http.Client constructor function.
-	newHTTPClient := func() *http.Client { return jwtConfig.Client(oauth2.NoContext) }
+	newHTTPClient := func() *http.Client {
+		c := jwtConfig.Client(oauth2.NoContext)
+		if ipv4Only {
+			c.Transport.(*oauth2.Transport).Base = &http.Transport{
+				DialContext:         connectIPv4Only,
+				TLSHandshakeTimeout: 2 * time.Second,
+			}
+		}
+		return c
+	}
 	return newAsyncWorkerGroup(newHTTPClient, options...)
 }
 
