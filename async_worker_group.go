@@ -2,7 +2,6 @@ package bqstreamer
 
 import (
 	"context"
-	"errors"
 	"net"
 	"net/http"
 	"sync"
