@@ -2,14 +2,15 @@ package bqstreamer
 
 import (
 	"context"
-	"errors"
 	"net"
 	"net/http"
 	"sync"
 	"time"
 
 	"golang.org/x/oauth2"
+	"golang.org/x/oauth2/google"
 	"golang.org/x/oauth2/jwt"
+	"google.golang.org/api/bigquery/v2"
 )
 
 // AsyncWorkerGroup asynchronously streams rows to BigQuery in bulk.
@@ -57,10 +58,21 @@ func connectIPv4Only(ctx context.Context, network, addr string) (net.Conn, error
 	return dialer.DialContext(ctx, "tcp4", addr)
 }
 
-// New returns a new AsyncWorkerGroup using given OAuth2/JWT configuration.
+// NewAsyncWorkerGroup returns a new AsyncWorkerGroup using given OAuth2/JWT configuration.
+// Set jwtConfig to nil if your system corresponds to either of the following conditions:
+// - a system that has called "gcloud auth application-default login"
+// - a system running in Google Application Engine
+// - a system running in Google Compute Engine
+// ref: https://developers.google.com/identity/protocols/application-default-credentials
 func NewAsyncWorkerGroup(jwtConfig *jwt.Config, ipv4Only bool, options ...AsyncOptionFunc) (*AsyncWorkerGroup, error) {
 	if jwtConfig == nil {
-		return nil, errors.New("jwt.Config is nil")
+		ctx := oauth2.NoContext
+		client, err := google.DefaultClient(ctx, bigquery.BigqueryInsertdataScope)
+		if err != nil {
+			return nil, err
+		}
+		newHTTPClient := func() *http.Client { return client }
+		return newAsyncWorkerGroup(newHTTPClient, options...)
 	}
 
 	// Create a new Streamer, with OAuth2/JWT http.Client constructor function.
