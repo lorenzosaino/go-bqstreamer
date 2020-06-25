@@ -154,7 +154,7 @@ func (w *SyncWorker) insertAll(insertFunc func(projectID, datasetID, tableID str
 // TODO cache bigquery service instead of creating a new one every insertTable() call
 // TODO add support for SkipInvalidRows, IgnoreUnknownValues
 func (w *SyncWorker) insertTable(projectID, datasetID, tableID string, tbl table) *TableInsertErrors {
-	operation := func(service *bigquery.Service) (*bigquery.TableDataInsertAllResponse, error) {
+	operation := func(service *bigquery.Service, ctx context.Context) (*bigquery.TableDataInsertAllResponse, error) {
 		return bigquery.NewTabledataService(service).
 			InsertAll(
 				projectID, datasetID, tableID,
@@ -164,18 +164,23 @@ func (w *SyncWorker) insertTable(projectID, datasetID, tableID string, tbl table
 					IgnoreUnknownValues: w.ignoreUnknownValues,
 					SkipInvalidRows:     w.skipInvalidRows,
 				}).
+			Context(ctx).
 			Do()
 	}
 
 	var res *bigquery.TableDataInsertAllResponse
 	var err error
+	ctx := context.Background()
 	if w.circuit != nil {
-		err = w.circuit.Execute(context.Background(), func(ctx context.Context) (err error) {
-			res, err = operation(w.service)
+		timeout := w.circuit.Config().Execution.Timeout
+		ctx, cancel := context.WithTimeout(ctx, timeout)
+		defer cancel()
+		err = w.circuit.Execute(ctx, func(ctx context.Context) (err error) {
+			res, err = operation(w.service, ctx)
 			return err
 		}, nil)
 	} else {
-		res, err = operation(w.service)
+		res, err = operation(w.service, ctx)
 	}
 
 	var rows []*bigquery.TableDataInsertAllResponseInsertErrors
