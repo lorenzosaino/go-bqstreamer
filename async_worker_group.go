@@ -7,6 +7,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/cep21/circuit/v3"
 	"golang.org/x/oauth2"
 	"golang.org/x/oauth2/google"
 	"golang.org/x/oauth2/jwt"
@@ -50,6 +51,10 @@ type AsyncWorkerGroup struct {
 	// The default value is false, which causes the entire request
 	// to fail if any invalid rows exist.
 	skipInvalidRows bool
+
+	// Optional circuit breaker injection. If provided, all workers will
+	// wrap insert operations with it
+	circuit *circuit.Circuit
 }
 
 var dialer = &net.Dialer{}
@@ -116,6 +121,7 @@ func newAsyncWorkerGroup(newHTTPClient func() *http.Client, options ...AsyncOpti
 			SetSyncRetryInterval(m.retryInterval),
 			SetSyncIgnoreUnknownValues(m.ignoreUnknownValues),
 			SetSyncSkipInvalidRows(m.skipInvalidRows),
+			SetSyncCircuitBreaker(m.circuit),
 		)
 		if err != nil {
 			return nil, err

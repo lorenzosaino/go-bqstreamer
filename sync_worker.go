@@ -4,8 +4,6 @@ package bqstreamer
 
 import (
 	"context"
-	"fmt"
-	"log"
 	"net"
 	"net/http"
 	"time"
@@ -13,8 +11,6 @@ import (
 	bigquery "google.golang.org/api/bigquery/v2"
 	"google.golang.org/api/googleapi"
 
-	"github.com/cep21/circuit/metriceventstream"
-	"github.com/cep21/circuit/metrics/rolling"
 	"github.com/cep21/circuit/v3"
 )
 
@@ -50,6 +46,8 @@ type SyncWorker struct {
 	// to fail if any invalid rows exist.
 	skipInvalidRows bool
 
+	// Optional circuit breaker injection. If provided, insert operations
+	// will be wrapped with it
 	circuit *circuit.Circuit
 }
 
@@ -73,32 +71,6 @@ func NewSyncWorker(client *http.Client, options ...SyncOptionFunc) (*SyncWorker,
 			return nil, err
 		}
 	}
-
-	sf := rolling.StatFactory{}
-	h := circuit.Manager{
-		DefaultCircuitProperties: []circuit.CommandPropertiesConstructor{sf.CreateConfig},
-	}
-	w.circuit = h.MustCreateCircuit(fmt.Sprintf("bqstreamer"))
-
-	es := metriceventstream.MetricEventStream{
-		Manager: &h,
-	}
-	go func() {
-		if err := es.Start(); err != nil {
-			log.Fatal(err)
-		}
-	}()
-
-	http.Handle("/hystrix.stream", &es)
-	srv := &http.Server{Addr: "127.0.0.1:8081"}
-	go func() {
-		log.Println("Starting http server for hystrix metrics")
-        // always returns error. ErrServerClosed on graceful close
-        if err := srv.ListenAndServe(); err != http.ErrServerClosed {
-            // unexpected error. port in use?
-            log.Fatalf("ListenAndServe(): %v", err)
-        }
-    }()
 
 	return &w, nil
 }
@@ -182,9 +154,8 @@ func (w *SyncWorker) insertAll(insertFunc func(projectID, datasetID, tableID str
 // TODO cache bigquery service instead of creating a new one every insertTable() call
 // TODO add support for SkipInvalidRows, IgnoreUnknownValues
 func (w *SyncWorker) insertTable(projectID, datasetID, tableID string, tbl table) *TableInsertErrors {
-	var res *bigquery.TableDataInsertAllResponse
-	err := w.circuit.Execute(context.Background(), func(ctx context.Context) (err error) {
-		res, err = bigquery.NewTabledataService(w.service).
+	operation := func(service *bigquery.Service) (*bigquery.TableDataInsertAllResponse, error) {
+		return bigquery.NewTabledataService(service).
 			InsertAll(
 				projectID, datasetID, tableID,
 				&bigquery.TableDataInsertAllRequest{
@@ -194,8 +165,18 @@ func (w *SyncWorker) insertTable(projectID, datasetID, tableID string, tbl table
 					SkipInvalidRows:     w.skipInvalidRows,
 				}).
 			Do()
-		return
-	}, nil)
+	}
+
+	var res *bigquery.TableDataInsertAllResponse
+	var err error
+	if w.circuit != nil {
+		err = w.circuit.Execute(context.Background(), func(ctx context.Context) (err error) {
+			res, err = operation(w.service)
+			return err
+		}, nil)
+	} else {
+		res, err = operation(w.service)
+	}
 
 	var rows []*bigquery.TableDataInsertAllResponseInsertErrors
 	if res != nil {

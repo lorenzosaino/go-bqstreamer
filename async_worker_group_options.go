@@ -5,6 +5,8 @@ package bqstreamer
 import (
 	"errors"
 	"time"
+
+	"github.com/cep21/circuit/v3"
 )
 
 const (
@@ -124,6 +126,16 @@ func SetAsyncIgnoreUnknownValues(ignore bool) AsyncOptionFunc {
 func SetAsyncSkipInvalidRows(skip bool) AsyncOptionFunc {
 	return func(w *AsyncWorkerGroup) error {
 		w.skipInvalidRows = skip
+		return nil
+	}
+}
+
+
+// SetAsyncCircuitBreaker allows you to set a cep21/circuit, which will wrap all
+// insert operations for all workers
+func SetAsyncCircuitBreaker(circuit *circuit.Circuit) AsyncOptionFunc {
+	return func(w *AsyncWorkerGroup) error {
+		w.circuit = circuit
 		return nil
 	}
 }
