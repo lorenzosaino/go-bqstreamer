@@ -5,6 +5,8 @@ package bqstreamer
 import (
 	"errors"
 	"time"
+
+	"github.com/cep21/circuit/v3"
 )
 
 const (
@@ -63,6 +65,15 @@ func SetSyncIgnoreUnknownValues(ignore bool) SyncOptionFunc {
 func SetSyncSkipInvalidRows(skip bool) SyncOptionFunc {
 	return func(w *SyncWorker) error {
 		w.skipInvalidRows = skip
+		return nil
+	}
+}
+
+// SetSyncCircuitBreaker allows you to set a cep21/circuit, which will wrap all
+// insert operations
+func SetSyncCircuitBreaker(circuit *circuit.Circuit) SyncOptionFunc {
+	return func(w *SyncWorker) error {
+		w.circuit = circuit
 		return nil
 	}
 }

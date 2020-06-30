@@ -3,12 +3,15 @@
 package bqstreamer
 
 import (
+	"context"
 	"net"
 	"net/http"
 	"time"
 
 	bigquery "google.golang.org/api/bigquery/v2"
 	"google.golang.org/api/googleapi"
+
+	"github.com/cep21/circuit/v3"
 )
 
 // An estimated size for queued rows before inserting to BigQuery.
@@ -42,6 +45,10 @@ type SyncWorker struct {
 	// The default value is false, which causes the entire request
 	// to fail if any invalid rows exist.
 	skipInvalidRows bool
+
+	// Optional circuit breaker injection. If provided, insert operations
+	// will be wrapped with it
+	circuit *circuit.Circuit
 }
 
 // NewSyncWorker returns a new SyncWorker.
@@ -147,16 +154,34 @@ func (w *SyncWorker) insertAll(insertFunc func(projectID, datasetID, tableID str
 // TODO cache bigquery service instead of creating a new one every insertTable() call
 // TODO add support for SkipInvalidRows, IgnoreUnknownValues
 func (w *SyncWorker) insertTable(projectID, datasetID, tableID string, tbl table) *TableInsertErrors {
-	res, err := bigquery.NewTabledataService(w.service).
-		InsertAll(
-			projectID, datasetID, tableID,
-			&bigquery.TableDataInsertAllRequest{
-				Kind:                "bigquery#tableDataInsertAllRequest",
-				Rows:                tbl,
-				IgnoreUnknownValues: w.ignoreUnknownValues,
-				SkipInvalidRows:     w.skipInvalidRows,
-			}).
-		Do()
+	operation := func(service *bigquery.Service, ctx context.Context) (*bigquery.TableDataInsertAllResponse, error) {
+		return bigquery.NewTabledataService(service).
+			InsertAll(
+				projectID, datasetID, tableID,
+				&bigquery.TableDataInsertAllRequest{
+					Kind:                "bigquery#tableDataInsertAllRequest",
+					Rows:                tbl,
+					IgnoreUnknownValues: w.ignoreUnknownValues,
+					SkipInvalidRows:     w.skipInvalidRows,
+				}).
+			Context(ctx).
+			Do()
+	}
+
+	var res *bigquery.TableDataInsertAllResponse
+	var err error
+	ctx := context.Background()
+	if w.circuit != nil {
+		timeout := w.circuit.Config().Execution.Timeout
+		ctx, cancel := context.WithTimeout(ctx, timeout)
+		defer cancel()
+		err = w.circuit.Execute(ctx, func(ctx context.Context) (err error) {
+			res, err = operation(w.service, ctx)
+			return err
+		}, nil)
+	} else {
+		res, err = operation(w.service, ctx)
+	}
 
 	var rows []*bigquery.TableDataInsertAllResponseInsertErrors
 	if res != nil {
