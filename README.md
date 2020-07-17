@@ -45,7 +45,7 @@ There are two types of inserters you can use:
 
 ## Examples
 
-Check the GoDoc [examples][examples] section.
+Checkout the [example folder](https://github.com/lorenzosaino/go-bqstreamer/blob/master/example).
 
 ## Contribute
 
@@ -53,7 +53,7 @@ Check the GoDoc [examples][examples] section.
  1. File new bugs and ask for improvements.
  1. Pull requests welcome!
 
-### Test
+## Test
 
 ```bash
 # Run unit tests and check coverage.
